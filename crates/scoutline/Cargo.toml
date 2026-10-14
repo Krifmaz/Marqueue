@@ -1,10 +1,16 @@
 [package]
 name = "scoutline"
-description = "Built-in indexer engine (phase 4)"
+description = "Scoutline indexer engine embedded in Marqueue"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
 marqueue-adapters.workspace = true
+marqueue-core.workspace = true
 playbill.workspace = true
+scoutline-core.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+wiremock = "0.6"

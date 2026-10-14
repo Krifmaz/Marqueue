@@ -11,6 +11,9 @@ path = "src/main.rs"
 
 [dependencies]
 marqueue-core.workspace = true
+marqueue-adapters.workspace = true
+scoutline.workspace = true
+toml.workspace = true
 playbill.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -20,4 +23,5 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
+wiremock = "0.6"
 tower = { version = "0.5", features = ["util"] }
