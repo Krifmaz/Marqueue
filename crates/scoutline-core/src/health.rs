@@ -17,14 +17,14 @@ const FAILURES_BEFORE_BACKOFF: u32 = 2;
 const HISTORY_LEN: usize = 20;
 
 /// One recorded failure.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Failure {
     pub at: DateTime<Utc>,
     pub reason: String,
 }
 
 /// Health and stats for one indexer.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
 pub struct IndexerHealth {
     pub queries: u64,
     pub failures: u64,

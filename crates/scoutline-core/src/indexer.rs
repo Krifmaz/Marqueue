@@ -8,7 +8,8 @@ pub type IndexerId = String;
 
 /// Which API the indexer speaks. Both share the same request format;
 /// Torznab adds torrent fields (seeders, infohash, magnet).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Protocol {
     Newznab,
     Torznab,

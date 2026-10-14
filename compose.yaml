@@ -1,0 +1,22 @@
+# Try Scoutline:
+#   docker compose up -d
+#   open http://localhost:9797 and paste the api_key from ./config/scoutline.toml
+#
+# First start writes ./config/scoutline.toml with a fresh API key and no
+# indexers. Add [[indexer]] blocks there, then: docker compose restart
+
+services:
+  scoutline:
+    image: ghcr.io/krifmaz/scoutline:latest
+    # To build from this checkout instead of pulling, uncomment:
+    # build: .
+    container_name: scoutline
+    restart: unless-stopped
+    ports:
+      - "9797:9797"
+    environment:
+      PUID: "1000"     # owner of ./config on the host (run `id -u`)
+      PGID: "1000"     # its group (run `id -g`)
+      RUST_LOG: info   # debug shows every indexer request
+    volumes:
+      - ./config:/config

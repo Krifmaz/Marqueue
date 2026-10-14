@@ -11,7 +11,7 @@ use crate::dedupe::dedupe;
 use crate::error::IndexerError;
 use crate::feed::parse_feed;
 use crate::health::HealthTracker;
-use crate::indexer::{IndexerConfig, IndexerId};
+use crate::indexer::{IndexerConfig, IndexerId, Protocol};
 use crate::query::SearchQuery;
 use crate::result::SearchResult;
 
@@ -36,6 +36,24 @@ pub struct SearchOutcome {
     pub errors: Vec<(IndexerId, IndexerError)>,
 }
 
+/// Which indexers a search goes to.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Scope {
+    All,
+    Protocol(Protocol),
+    Indexer(IndexerId),
+}
+
+impl Scope {
+    fn includes(&self, config: &IndexerConfig) -> bool {
+        match self {
+            Self::All => true,
+            Self::Protocol(p) => config.protocol == *p,
+            Self::Indexer(id) => config.id == *id,
+        }
+    }
+}
+
 struct Indexer {
     config: IndexerConfig,
     client: Client,
@@ -43,7 +61,7 @@ struct Indexer {
 
 struct Inner {
     indexers: Vec<Indexer>,
-    cache: QueryCache<SearchQuery, Arc<SearchOutcome>>,
+    cache: QueryCache<(Scope, SearchQuery), Arc<SearchOutcome>>,
     health: HealthTracker,
 }
 
@@ -85,9 +103,21 @@ impl Engine {
         &self,
         query: &SearchQuery,
     ) -> impl Stream<Item = IndexerEvent> + Send + 'static {
+        self.search_stream_in(&Scope::All, query)
+    }
+
+    /// [`search_stream`](Self::search_stream) limited to `scope`.
+    pub fn search_stream_in(
+        &self,
+        scope: &Scope,
+        query: &SearchQuery,
+    ) -> impl Stream<Item = IndexerEvent> + Send + 'static {
         let query = Arc::new(query.clone());
         (0..self.inner.indexers.len())
-            .filter(|&i| self.inner.indexers[i].config.enabled)
+            .filter(|&i| {
+                let c = &self.inner.indexers[i].config;
+                c.enabled && scope.includes(c)
+            })
             .map(|i| {
                 let inner = Arc::clone(&self.inner);
                 let query = Arc::clone(&query);
@@ -100,14 +130,20 @@ impl Engine {
     /// de-duplicated results. Repeats within the cache TTL are answered
     /// from the cache.
     pub async fn search(&self, query: &SearchQuery) -> Arc<SearchOutcome> {
-        if let Some(hit) = self.inner.cache.get(query) {
+        self.search_in(&Scope::All, query).await
+    }
+
+    /// [`search`](Self::search) limited to `scope`.
+    pub async fn search_in(&self, scope: &Scope, query: &SearchQuery) -> Arc<SearchOutcome> {
+        let key = (scope.clone(), query.clone());
+        if let Some(hit) = self.inner.cache.get(&key) {
             return hit;
         }
 
         let mut results = Vec::new();
         let mut errors = Vec::new();
         let mut answered = false;
-        let mut events = self.search_stream(query);
+        let mut events = self.search_stream_in(scope, query);
         while let Some(event) = events.next().await {
             match event {
                 IndexerEvent::Results { results: r, .. } => {
@@ -124,7 +160,7 @@ impl Engine {
         });
         // Don't cache a search where every site failed: retry next time.
         if answered {
-            self.inner.cache.insert(query.clone(), Arc::clone(&outcome));
+            self.inner.cache.insert(key, Arc::clone(&outcome));
         }
         outcome
     }
@@ -191,7 +227,7 @@ async fn fetch(
     };
     Ok(items
         .into_iter()
-        .map(|item| SearchResult::from_item(item, config))
+        .map(|item| SearchResult::from_item(item, config, query.search_type))
         .collect())
 }
 

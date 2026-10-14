@@ -3,7 +3,9 @@
 use std::time::Duration;
 
 use futures::StreamExt;
-use scoutline_core::{Engine, IndexerConfig, IndexerError, IndexerEvent, Protocol, SearchQuery};
+use scoutline_core::{
+    Engine, IndexerConfig, IndexerError, IndexerEvent, Protocol, Scope, SearchQuery,
+};
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -169,4 +171,24 @@ async fn api_key_stays_out_of_errors() {
     let out = engine.search(&SearchQuery::rss()).await;
     let msg = out.errors[0].1.to_string();
     assert!(!msg.contains("SECRET"), "{msg}");
+}
+
+#[tokio::test]
+async fn scope_limits_indexers() {
+    let tracker = serve(TORZNAB, 1).await;
+    let usenet = serve(NEWZNAB, 0).await;
+    let engine = Engine::builder()
+        .indexer(indexer("t", Protocol::Torznab, &tracker))
+        .indexer(indexer("u", Protocol::Newznab, &usenet))
+        .build()
+        .unwrap();
+
+    let out = engine
+        .search_in(
+            &Scope::Protocol(Protocol::Torznab),
+            &SearchQuery::tv("The Bear"),
+        )
+        .await;
+    assert_eq!(out.results.len(), 2);
+    assert!(out.results.iter().all(|r| r.protocol == Protocol::Torznab));
 }

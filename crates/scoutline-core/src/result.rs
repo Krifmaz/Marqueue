@@ -1,10 +1,14 @@
 use chrono::{DateTime, Utc};
 
+use playbill::Hint;
+
+use crate::category;
 use crate::feed::FeedItem;
 use crate::indexer::{IndexerConfig, IndexerId, Protocol};
+use crate::query::SearchType;
 
 /// Where one copy of a release can be grabbed from.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Origin {
     pub indexer_id: IndexerId,
     pub indexer_name: String,
@@ -23,7 +27,7 @@ pub struct Origin {
 /// One release found by the search, parsed by playbill. After
 /// [`dedupe`](crate::dedupe) a result may have several origins; the
 /// first is the best one.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SearchResult {
     pub title: String,
     pub release: playbill::Release,
@@ -41,7 +45,11 @@ pub struct SearchResult {
 }
 
 impl SearchResult {
-    pub(crate) fn from_item(item: FeedItem, indexer: &IndexerConfig) -> Self {
+    pub(crate) fn from_item(
+        item: FeedItem,
+        indexer: &IndexerConfig,
+        search_type: SearchType,
+    ) -> Self {
         let infohash = item
             .attr("infohash")
             .map(|h| h.trim().to_ascii_lowercase())
@@ -83,7 +91,10 @@ impl SearchResult {
         };
 
         Self {
-            release: playbill::parse(&item.title),
+            release: playbill::parse_with_hint(
+                &item.title,
+                hint_for(&item.categories, search_type),
+            ),
             title: item.title.clone(),
             protocol: indexer.protocol,
             size: item.size,
@@ -112,6 +123,32 @@ impl SearchResult {
     }
 }
 
+/// Tells playbill what the release is, so names like `One.Piece.1089`
+/// parse right. The item's own categories win over the search type.
+fn hint_for(categories: &[u32], search_type: SearchType) -> Hint {
+    let from_category = |&id: &u32| match id {
+        id if id == category::TV_ANIME.id => Some(Hint::Anime),
+        id if id == category::AUDIO_AUDIOBOOK.id => Some(Hint::Book),
+        2000..=2999 => Some(Hint::Movie),
+        5000..=5999 => Some(Hint::Series),
+        7000..=7999 => Some(Hint::Book),
+        _ => None,
+    };
+    // Anime is a TV subcategory, so look for it before the TV parent.
+    if categories.contains(&category::TV_ANIME.id) {
+        return Hint::Anime;
+    }
+    categories
+        .iter()
+        .find_map(from_category)
+        .unwrap_or(match search_type {
+            SearchType::General => Hint::Auto,
+            SearchType::Movie => Hint::Movie,
+            SearchType::Tv => Hint::Series,
+            SearchType::Book => Hint::Book,
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,7 +160,7 @@ mod tests {
         let item = parse_feed(include_str!("../tests/fixtures/torznab.xml"))
             .unwrap()
             .remove(0);
-        let r = SearchResult::from_item(item, &idx);
+        let r = SearchResult::from_item(item, &idx, SearchType::Tv);
 
         assert_eq!(r.release.title.as_deref(), Some("The Bear"));
         assert_eq!(r.release.seasons, vec![3]);
@@ -141,5 +178,26 @@ mod tests {
             o.download_url.as_deref(),
             Some("https://tracker.example/dl/1001.torrent?passkey=PK")
         );
+    }
+
+    #[test]
+    fn hints() {
+        assert_eq!(hint_for(&[5000, 5070], SearchType::General), Hint::Anime);
+        assert_eq!(hint_for(&[2040], SearchType::Tv), Hint::Movie);
+        assert_eq!(hint_for(&[3030], SearchType::General), Hint::Book);
+        assert_eq!(hint_for(&[8000], SearchType::Tv), Hint::Series);
+        assert_eq!(hint_for(&[], SearchType::General), Hint::Auto);
+    }
+
+    #[test]
+    fn anime_category_reads_absolute_episode() {
+        let idx = IndexerConfig::new("t", "Tracker", Protocol::Torznab, "http://t", "k");
+        let item = FeedItem {
+            title: "One.Piece.1089.1080p.WEB.H264-GROUP".into(),
+            categories: vec![5070],
+            ..FeedItem::default()
+        };
+        let r = SearchResult::from_item(item, &idx, SearchType::General);
+        assert_eq!(r.release.absolute_episodes, vec![1089]);
     }
 }

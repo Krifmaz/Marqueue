@@ -31,7 +31,7 @@ mod query;
 mod result;
 
 pub use dedupe::dedupe;
-pub use engine::{Engine, EngineBuilder, IndexerEvent, SearchOutcome};
+pub use engine::{Engine, EngineBuilder, IndexerEvent, Scope, SearchOutcome};
 pub use error::IndexerError;
 pub use indexer::{IndexerConfig, IndexerId, Protocol};
 pub use query::{SearchQuery, SearchType};
