@@ -1,0 +1,12 @@
+services:
+  marqueue:
+    image: ghcr.io/krifmaz/marqueue:latest
+    container_name: marqueue
+    restart: unless-stopped
+    ports:
+      - "7979:7979"
+    environment:
+      - RUST_LOG=info
+      - TZ=Etc/UTC
+    volumes:
+      - ./config:/config

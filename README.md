@@ -21,7 +21,16 @@ cargo run --bin marqueue
 curl 'localhost:7979/api/v1/parse?name=The.Bear.S03E04.2160p.WEB-DL.DDP5.1.HDR.H.265-FLUX'
 ```
 
-`MARQUEUE_LISTEN` sets the address (default `0.0.0.0:7979`). Docker: `docker buildx build --platform linux/amd64,linux/arm64 .`
+`MARQUEUE_LISTEN` sets the address (default `0.0.0.0:7979`).
+
+## Docker
+
+Images for amd64 and arm64 are published to `ghcr.io/krifmaz/marqueue` on every push.
+
+```
+docker compose up -d
+curl localhost:7979/api/v1/health
+```
 
 ## Status
 
