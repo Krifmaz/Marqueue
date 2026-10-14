@@ -50,16 +50,24 @@ a { color: var(--accent); text-decoration: none; }
 <main>
   <div id="indexers"></div>
   <form id="search">
-    <select name="t">
+    <select name="type">
       <option value="search">All</option>
       <option value="tvsearch">TV</option>
       <option value="movie">Movie</option>
+      <option value="music">Music</option>
       <option value="book">Book</option>
     </select>
-    <input name="q" placeholder="Search, or leave empty for latest" autofocus>
-    <input name="season" class="small" placeholder="Season">
-    <input name="ep" class="small" placeholder="Episode">
-    <input name="imdbid" class="small" placeholder="IMDb id">
+    <select name="categories">
+      <option value="">Any category</option>
+      <option value="2000">Movies</option>
+      <option value="5000">TV</option>
+      <option value="5070">Anime</option>
+      <option value="3000">Audio</option>
+      <option value="3040">Audio/Lossless</option>
+      <option value="3030">Audiobooks</option>
+      <option value="7000">Books</option>
+    </select>
+    <input name="query" placeholder="Search, or leave empty for latest" autofocus>
     <button>Search</button>
   </form>
   <p id="status" class="muted"></p>
@@ -82,20 +90,22 @@ const size = (b) => { if (!b) return ""; const u = ["B","KB","MB","GB","TB"]; le
 const age = (d) => { if (!d) return ""; const h = (Date.now() - new Date(d)) / 36e5; return h < 1 ? Math.max(1, Math.round(h * 60)) + "m" : h < 48 ? Math.round(h) + "h" : Math.round(h / 24) + "d"; };
 
 async function api(path, params = {}) {
-  const qs = new URLSearchParams({ ...params, apikey: keyInput.value });
-  const r = await fetch(path + "?" + qs);
+  const qs = new URLSearchParams(params);
+  const r = await fetch(path + "?" + qs, { headers: { "X-Api-Key": keyInput.value } });
   const body = await r.json();
-  if (!r.ok) throw new Error(body.error || r.statusText);
-  return body;
+  if (!r.ok) throw new Error(body.message || r.statusText);
+  let failures = [];
+  try { failures = JSON.parse(r.headers.get("x-scoutline-failures") || "[]"); } catch {}
+  return { body, failures };
 }
 
 async function loadIndexers() {
   if (!keyInput.value) { $("#indexers").innerHTML = '<span class="muted">Enter the API key to start.</span>'; return; }
   try {
-    const list = await api("/api/v1/indexers");
+    const { body: list } = await api("/api/v1/indexer");
     $("#indexers").innerHTML = list.length ? list.map((i) => {
       const h = i.health;
-      const cls = !i.enabled ? "muted" : !h ? "" : h.backoff_until ? "bad" : h.consecutive_failures ? "warn" : "ok";
+      const cls = !i.enable ? "muted" : !h ? "" : h.backoff_until ? "bad" : h.consecutive_failures ? "warn" : "ok";
       const why = h && h.history.length ? h.history[h.history.length - 1].reason : "";
       return `<span class="chip" title="${esc(why)}"><span class="${cls}">●</span> ${esc(i.name)} <span class="muted">${i.protocol}</span></span>`;
     }).join("") : '<span class="muted">No indexers yet: add [[indexer]] blocks to scoutline.toml and restart.</span>';
@@ -108,7 +118,7 @@ function parsed(r) {
   if (p.absolute_episodes.length) tags.push("#" + p.absolute_episodes.join(","));
   if (p.year) tags.push(p.year);
   for (const v of [p.resolution, p.source, p.codec, ...p.hdr, p.audio, p.release_group]) if (v) tags.push(v);
-  if (r.origins.some((o) => o.download_factor === 0)) tags.push("freeleech");
+  if (r.sources.some((o) => o.download_factor === 0)) tags.push("freeleech");
   return `<div>${esc(p.title || "")}</div>` + tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("");
 }
 
@@ -118,20 +128,20 @@ $("#search").addEventListener("submit", async (ev) => {
   $("#status").textContent = "Searching…";
   const started = performance.now();
   try {
-    const out = await api("/api/v1/search", params);
+    const { body: results, failures } = await api("/api/v1/search", params);
     const secs = ((performance.now() - started) / 1000).toFixed(1);
-    const errs = out.errors.map((e) => `${e.indexer}: ${e.error}`).join(" · ");
-    $("#status").innerHTML = `${out.results.length} results in ${secs}s` + (errs ? ` · <span class="bad">${esc(errs)}</span>` : "");
-    $("#results").innerHTML = out.results.map((r) => {
-      const best = r.origins[0];
+    const errs = failures.map((e) => `${e.indexer}: ${e.error}`).join(" · ");
+    $("#status").innerHTML = `${results.length} results in ${secs}s` + (errs ? ` · <span class="bad">${esc(errs)}</span>` : "");
+    $("#results").innerHTML = results.map((r) => {
+      const link = r.magnetUrl || r.downloadUrl;
       return `<tr>
         <td class="title">${esc(r.title)}</td>
         <td>${parsed(r)}</td>
         <td>${size(r.size)}</td>
-        <td>${age(r.published)}</td>
-        <td>${r.protocol === "torznab" ? (r.origins.reduce((n, o) => n + (o.seeders || 0), 0)) : ""}</td>
-        <td>${r.origins.map((o) => esc(o.indexer_name)).join("<br>")}</td>
-        <td>${best.download_url ? `<a href="${esc(best.download_url)}" rel="noreferrer">Get</a>` : ""}</td>
+        <td>${age(r.publishDate)}</td>
+        <td>${r.protocol === "torrent" ? r.sources.reduce((n, o) => n + (o.seeders || 0), 0) : ""}</td>
+        <td>${r.sources.map((o) => esc(o.indexer_name)).join("<br>")}</td>
+        <td>${link ? `<a href="${esc(link)}" rel="noreferrer">Get</a>` : ""}</td>
       </tr>`;
     }).join("") || '<tr><td colspan="7" class="muted">Nothing found.</td></tr>';
   } catch (e) {

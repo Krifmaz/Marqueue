@@ -146,6 +146,7 @@ fn hint_for(categories: &[u32], search_type: SearchType) -> Hint {
             SearchType::Movie => Hint::Movie,
             SearchType::Tv => Hint::Series,
             SearchType::Book => Hint::Book,
+            SearchType::Music => Hint::Auto,
         })
 }
 

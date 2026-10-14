@@ -29,14 +29,27 @@ Add a **Torznab** indexer (for torrents) or a **Newznab** indexer (for Usenet):
 
 Swap `all` for an indexer `id` to add a single indexer. Use `localhost` instead of `scoutline` if Sonarr isn't in the same compose network.
 
+### Use it in place of Prowlarr (Encore and other apps)
+
+Apps that call Prowlarr's own API can point at Scoutline unchanged: set the Prowlarr URL to `http://scoutline:9797` and the Prowlarr API key to Scoutline's `api_key`. For Encore:
+
+```yaml
+environment:
+  - TORZNAB_ENABLED=true
+  - PROWLARR_URL=http://scoutline:9797
+  - PROWLARR_API_KEY=${SCOUTLINE_API_KEY}
+```
+
+Set the same key on Scoutline with `SCOUTLINE_API_KEY` (it overrides `api_key` in the file) and put it in a `.env` file next to the compose file.
+
 ### Endpoints
 
 | Path | What |
 | --- | --- |
 | `/` | Manual search UI |
-| `/{torznab,newznab}/{all,id}/api` | Torznab/Newznab API (`t=caps`, `search`, `tvsearch`, `movie`, `book`) |
-| `/api/v1/search` | JSON search, same parameters plus `indexer` / `protocol` |
-| `/api/v1/indexers` | Indexers and their health |
+| `/{torznab,newznab}/{all,id}/api` | Torznab/Newznab API (`t=caps`, `search`, `tvsearch`, `movie`, `music`, `book`) |
+| `/api/v1/search` | Prowlarr-compatible search (`query`, `type`, `categories`, `indexerIds`, `limit`, `offset`), plus parsed `release` and all `sources` per result |
+| `/api/v1/indexer` | Prowlarr-compatible indexer list, plus `health` |
 | `/health` | Liveness, no key needed |
 
 Every endpoint except `/` and `/health` needs `apikey=` or an `X-Api-Key` header.
@@ -46,7 +59,7 @@ Every endpoint except `/` and `/health` needs `apikey=` or an `X-Api-Key` header
 Phase 1 of 5 (native feeds) plus a preview of the standalone server.
 
 - Newznab and Torznab indexers by URL + API key
-- Search types: general/RSS, movie (IMDb/TMDB), TV (TVDB, season, episode), book (author, title)
+- Search types: general/RSS, movie (IMDb/TMDB), TV (TVDB, season, episode), music (artist, album), book (author, title)
 - Async fan-out across all indexers, per-site timeouts, results streamed as each site answers
 - Short-lived query cache (2 minutes by default)
 - Per-indexer health: failure history, stats, exponential backoff (1 min doubling to 3 h)

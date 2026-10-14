@@ -41,7 +41,8 @@ pub struct SearchOutcome {
 pub enum Scope {
     All,
     Protocol(Protocol),
-    Indexer(IndexerId),
+    /// These indexers only.
+    Indexers(Vec<IndexerId>),
 }
 
 impl Scope {
@@ -49,7 +50,7 @@ impl Scope {
         match self {
             Self::All => true,
             Self::Protocol(p) => config.protocol == *p,
-            Self::Indexer(id) => config.id == *id,
+            Self::Indexers(ids) => ids.contains(&config.id),
         }
     }
 }

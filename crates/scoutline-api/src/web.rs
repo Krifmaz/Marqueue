@@ -1,14 +1,13 @@
 use std::sync::Arc;
 
-use axum::extract::{Path, Query, State};
-use axum::http::{HeaderMap, StatusCode, header};
+use axum::extract::{Path, Query, RawQuery, State};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
-use scoutline_core::health::IndexerHealth;
-use scoutline_core::{Engine, Protocol, Scope, SearchResult};
-use serde::{Deserialize, Serialize};
+use scoutline_core::{Engine, Protocol, Scope};
 
+use crate::prowlarr;
 use crate::torznab::{self, Params, Request};
 
 const UI: &str = include_str!("ui.html");
@@ -30,7 +29,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(|| async { Html(UI) }))
         .route("/health", get(|| async { "ok" }))
-        .route("/api/v1/indexers", get(indexers))
+        .route("/api/v1/indexer", get(indexers))
         .route("/api/v1/search", get(search))
         .route("/{protocol}/{id}/api", get(feed))
         .route("/{protocol}/{id}", get(feed))
@@ -75,7 +74,7 @@ async fn feed(
             .find(|i| i.id == id && i.protocol == protocol)
         {
             Some(i) => (
-                Scope::Indexer(i.id.clone()),
+                Scope::Indexers(vec![i.id.clone()]),
                 format!("Scoutline: {}", i.name),
             ),
             None => {
@@ -99,117 +98,63 @@ async fn feed(
     }
 }
 
-#[derive(Deserialize)]
-struct SearchParams {
-    #[serde(flatten)]
-    torznab: Params,
-    /// Limit to one indexer.
-    indexer: Option<String>,
-    /// Limit to `torznab` or `newznab` indexers.
-    protocol: Option<Protocol>,
+/// The API key from `?apikey=` or `X-Api-Key`.
+fn query_key(raw: Option<&str>) -> Option<String> {
+    url::form_urlencoded::parse(raw.unwrap_or("").as_bytes())
+        .find(|(k, _)| k == "apikey")
+        .map(|(_, v)| v.into_owned())
 }
 
-#[derive(Serialize)]
-struct SearchResponse<'a> {
-    results: &'a [SearchResult],
-    errors: Vec<IndexerFailure>,
+fn json_error(status: StatusCode, msg: &str) -> Response {
+    (status, Json(serde_json::json!({ "message": msg }))).into_response()
 }
 
-#[derive(Serialize)]
-struct IndexerFailure {
-    indexer: String,
-    error: String,
-}
-
+/// Prowlarr-compatible search. Indexers that failed are listed in the
+/// `X-Scoutline-Failures` header as JSON, since Prowlarr's body is a bare
+/// array.
 async fn search(
     State(state): State<Arc<AppState>>,
-    Query(params): Query<SearchParams>,
+    RawQuery(raw): RawQuery,
     headers: HeaderMap,
 ) -> Response {
-    if !state.authorized(params.torznab.apikey.as_deref(), &headers) {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({ "error": "Invalid API key" })),
-        )
-            .into_response();
+    if !state.authorized(query_key(raw.as_deref()).as_deref(), &headers) {
+        return json_error(StatusCode::UNAUTHORIZED, "Invalid API key");
     }
-    let query = match params.torznab.request() {
-        Ok(Request::Search(q)) => q,
-        Ok(Request::Caps) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({ "error": "use the Torznab endpoint for caps" })),
-            )
-                .into_response();
-        }
-        Err((_, msg)) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({ "error": msg })),
-            )
-                .into_response();
-        }
+    let params = match prowlarr::SearchParams::parse(raw.as_deref().unwrap_or("")) {
+        Ok(p) => p,
+        Err(msg) => return json_error(StatusCode::BAD_REQUEST, &msg),
     };
-    let scope = match (params.indexer.filter(|i| !i.is_empty()), params.protocol) {
-        (Some(id), _) => Scope::Indexer(id),
-        (None, Some(p)) => Scope::Protocol(p),
-        (None, None) => Scope::All,
-    };
+    let out = state
+        .engine
+        .search_in(&params.scope(&state.engine), &params.query())
+        .await;
+    let releases: Vec<_> = out
+        .results
+        .iter()
+        .map(|r| prowlarr::release(r, &state.engine))
+        .collect();
+    let failures: Vec<_> = out
+        .errors
+        .iter()
+        .map(|(indexer, e)| serde_json::json!({ "indexer": indexer, "error": e.to_string() }))
+        .collect();
 
-    let out = state.engine.search_in(&scope, &query).await;
-    Json(SearchResponse {
-        results: &out.results,
-        errors: out
-            .errors
-            .iter()
-            .map(|(indexer, e)| IndexerFailure {
-                indexer: indexer.clone(),
-                error: e.to_string(),
-            })
-            .collect(),
-    })
-    .into_response()
-}
-
-/// An indexer as the UI sees it: no API key.
-#[derive(Serialize)]
-struct IndexerInfo {
-    id: String,
-    name: String,
-    protocol: Protocol,
-    enabled: bool,
-    health: Option<IndexerHealth>,
-}
-
-#[derive(Deserialize)]
-struct KeyParam {
-    apikey: Option<String>,
+    let mut resp = Json(releases).into_response();
+    if let Ok(v) = HeaderValue::from_str(&serde_json::Value::from(failures).to_string()) {
+        resp.headers_mut().insert("x-scoutline-failures", v);
+    }
+    resp
 }
 
 async fn indexers(
     State(state): State<Arc<AppState>>,
-    Query(k): Query<KeyParam>,
+    RawQuery(raw): RawQuery,
     headers: HeaderMap,
 ) -> Response {
-    if !state.authorized(k.apikey.as_deref(), &headers) {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({ "error": "Invalid API key" })),
-        )
-            .into_response();
+    if !state.authorized(query_key(raw.as_deref()).as_deref(), &headers) {
+        return json_error(StatusCode::UNAUTHORIZED, "Invalid API key");
     }
-    let list: Vec<IndexerInfo> = state
-        .engine
-        .indexers()
-        .map(|i| IndexerInfo {
-            id: i.id.clone(),
-            name: i.name.clone(),
-            protocol: i.protocol,
-            enabled: i.enabled,
-            health: state.engine.health().get(&i.id),
-        })
-        .collect();
-    Json(list).into_response()
+    Json(prowlarr::indexers(&state.engine)).into_response()
 }
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {

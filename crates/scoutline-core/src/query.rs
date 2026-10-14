@@ -8,6 +8,7 @@ pub enum SearchType {
     Movie,
     Tv,
     Book,
+    Music,
 }
 
 impl SearchType {
@@ -17,6 +18,7 @@ impl SearchType {
             Self::Movie => "movie",
             Self::Tv => "tvsearch",
             Self::Book => "book",
+            Self::Music => "music",
         }
     }
 }
@@ -36,6 +38,8 @@ pub struct SearchQuery {
     pub episode: Option<String>,
     pub author: Option<String>,
     pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
     /// Newznab category ids; empty means all.
     pub categories: Vec<u32>,
     pub limit: Option<u32>,
@@ -76,6 +80,15 @@ impl SearchQuery {
             search_type: SearchType::Book,
             author,
             title,
+            ..Self::default()
+        }
+    }
+
+    pub fn music(artist: Option<String>, album: Option<String>) -> Self {
+        Self {
+            search_type: SearchType::Music,
+            artist,
+            album,
             ..Self::default()
         }
     }
@@ -155,6 +168,12 @@ impl SearchQuery {
         if let Some(t) = &self.title {
             p.push(("title", t.clone()));
         }
+        if let Some(a) = &self.artist {
+            p.push(("artist", a.clone()));
+        }
+        if let Some(a) = &self.album {
+            p.push(("album", a.clone()));
+        }
         if !self.categories.is_empty() {
             let cats: Vec<String> = self.categories.iter().map(u32::to_string).collect();
             p.push(("cat", cats.join(",")));
@@ -207,6 +226,16 @@ mod tests {
         };
         assert_eq!(get(Protocol::Newznab), "15239678");
         assert_eq!(get(Protocol::Torznab), "tt15239678");
+    }
+
+    #[test]
+    fn music_params() {
+        let q = SearchQuery::music(Some("Boards of Canada".into()), Some("Geogaddi".into()))
+            .categories([3040]);
+        let p = q.params(Protocol::Torznab);
+        assert_eq!(p[0], ("t", "music".into()));
+        assert!(p.contains(&("artist", "Boards of Canada".into())));
+        assert!(p.contains(&("album", "Geogaddi".into())));
     }
 
     #[test]

@@ -25,6 +25,8 @@ pub struct Params {
     pub ep: Option<String>,
     pub author: Option<String>,
     pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
     pub cat: Option<String>,
     pub limit: Option<String>,
     pub offset: Option<String>,
@@ -34,7 +36,7 @@ pub struct Params {
 #[derive(Debug, PartialEq)]
 pub enum Request {
     Caps,
-    Search(SearchQuery),
+    Search(Box<SearchQuery>),
 }
 
 impl Params {
@@ -45,6 +47,7 @@ impl Params {
             "tvsearch" => SearchType::Tv,
             "movie" => SearchType::Movie,
             "book" => SearchType::Book,
+            "music" => SearchType::Music,
             other => return Err((ERR_NO_FUNCTION, format!("no such function: {other}"))),
         };
         let text = |v: &Option<String>| {
@@ -88,12 +91,14 @@ impl Params {
             episode: text(&self.ep),
             author: text(&self.author),
             title: text(&self.title),
+            artist: text(&self.artist),
+            album: text(&self.album),
             limit: num("limit", &self.limit)?,
             offset: num("offset", &self.offset)?,
             ..SearchQuery::default()
         };
         q = q.categories(categories);
-        Ok(Request::Search(q))
+        Ok(Request::Search(Box::new(q)))
     }
 }
 
@@ -102,7 +107,7 @@ pub fn caps(server_title: &str) -> String {
     let mut x = String::from(r#"<?xml version="1.0" encoding="UTF-8"?>"#);
     let _ = write!(
         x,
-        r#"<caps><server title="{}"/><limits default="100" max="100"/><searching><search available="yes" supportedParams="q"/><tv-search available="yes" supportedParams="q,season,ep,imdbid,tvdbid"/><movie-search available="yes" supportedParams="q,imdbid,tmdbid"/><book-search available="yes" supportedParams="q,author,title"/><audio-search available="no" supportedParams="q"/></searching><categories>"#,
+        r#"<caps><server title="{}"/><limits default="100" max="100"/><searching><search available="yes" supportedParams="q"/><tv-search available="yes" supportedParams="q,season,ep,imdbid,tvdbid"/><movie-search available="yes" supportedParams="q,imdbid,tmdbid"/><book-search available="yes" supportedParams="q,author,title"/><music-search available="yes" supportedParams="q,artist,album"/><audio-search available="yes" supportedParams="q,artist,album"/></searching><categories>"#,
         esc(server_title)
     );
     let mut open = false;
@@ -320,7 +325,7 @@ mod tests {
     fn caps_and_errors() {
         assert_eq!(params(&[("t", "caps")]).request(), Ok(Request::Caps));
         assert_eq!(
-            params(&[("t", "music")]).request().unwrap_err().0,
+            params(&[("t", "radio")]).request().unwrap_err().0,
             ERR_NO_FUNCTION
         );
         assert_eq!(

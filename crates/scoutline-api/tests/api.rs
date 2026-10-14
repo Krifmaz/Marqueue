@@ -90,23 +90,80 @@ async fn torznab_feed_for_sonarr() {
 }
 
 #[tokio::test]
-async fn json_api() {
+async fn prowlarr_api_as_encore_calls_it() {
     let (app, _t) = app().await;
     assert_eq!(
-        get(&app, "/api/v1/search?q=bear").await.0,
+        get(&app, "/api/v1/search?query=bear").await.0,
         StatusCode::UNAUTHORIZED
     );
 
-    let (status, body) = get(&app, "/api/v1/search?t=tvsearch&q=The+Bear&apikey=SECRET").await;
-    assert_eq!(status, StatusCode::OK);
-    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(v["results"].as_array().unwrap().len(), 2);
-    assert_eq!(v["results"][0]["release"]["title"], "The Bear");
-    assert_eq!(v["results"][0]["release"]["resolution"], "2160p");
+    // Exactly what Encore sends: X-Api-Key header, query/type/categories/limit.
+    let req = Request::get("/api/v1/search?query=The+Bear&type=search&categories=3000&limit=100")
+        .header("X-Api-Key", "SECRET")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(resp.headers()["x-scoutline-failures"], "[]");
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let r = &v.as_array().unwrap()[0];
+    assert_eq!(
+        r["title"],
+        "The.Bear.S03E04.2160p.WEB-DL.DDP5.1.HDR.H.265-FLUX"
+    );
+    assert_eq!(r["protocol"], "torrent");
+    assert_eq!(r["indexer"], "Example Tracker");
+    assert_eq!(r["indexerId"], 1);
+    assert_eq!(r["seeders"], 120);
+    assert_eq!(r["size"], 6_442_450_944u64);
+    assert_eq!(
+        r["downloadUrl"],
+        "https://tracker.example/dl/1001.torrent?passkey=PK"
+    );
+    assert!(
+        r["magnetUrl"]
+            .as_str()
+            .unwrap()
+            .starts_with("magnet:?xt=urn:btih:")
+    );
+    assert_eq!(r["publishDate"], "2026-10-13T08:00:00Z");
+    assert_eq!(r["categories"][1]["name"], "TV/UHD");
+    assert_eq!(r["release"]["title"], "The Bear");
 
-    let (_, body) = get(&app, "/api/v1/indexers?apikey=SECRET").await;
+    let (_, body) = get(&app, "/api/v1/indexer?apikey=SECRET").await;
     let v: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(v[0]["id"], "tracker");
+    assert_eq!(v[0]["id"], 1);
+    assert_eq!(v[0]["slug"], "tracker");
+    assert_eq!(v[0]["enable"], true);
+    assert_eq!(v[0]["protocol"], "torrent");
     assert_eq!(v[0]["health"]["queries"], 1);
     assert!(!body.contains("TRACKER-KEY"));
+
+    // -1 is Prowlarr's "all Usenet": none here.
+    let (_, body) = get(
+        &app,
+        "/api/v1/search?query=bear&indexerIds=-1&apikey=SECRET",
+    )
+    .await;
+    assert_eq!(body, "[]");
+}
+
+#[tokio::test]
+async fn music_search_reaches_indexer() {
+    let (app, tracker) = app().await;
+    Mock::given(method("GET"))
+        .and(query_param("t", "music"))
+        .and(query_param("artist", "Boards of Canada"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(TORZNAB))
+        .with_priority(1)
+        .expect(1)
+        .mount(&tracker)
+        .await;
+    let (_, body) = get(
+        &app,
+        "/torznab/all/api?t=music&artist=Boards+of+Canada&album=Geogaddi&apikey=SECRET",
+    )
+    .await;
+    assert_eq!(parse_feed(&body).unwrap().len(), 2);
 }

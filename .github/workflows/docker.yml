@@ -12,7 +12,8 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/${{ github.repository }}
+  # GHCR names must be lowercase.
+  IMAGE: ghcr.io/krifmaz/scoutline
 
 jobs:
   test:
