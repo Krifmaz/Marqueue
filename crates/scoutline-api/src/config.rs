@@ -1,12 +1,12 @@
 //! `scoutline.toml`: the standalone server's settings and indexers.
 
-use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{Context, bail};
-use scoutline_core::{Engine, IndexerConfig, Protocol};
+use scoutline_core::Engine;
+use scoutline_core::settings::{self, IndexerSettings};
 use scoutline_net::{DEFAULT_USER_AGENT, NetSettings};
 use serde::Deserialize;
 
@@ -23,21 +23,7 @@ pub struct Config {
     #[serde(default = "default_cache_ttl")]
     pub cache_ttl_secs: u64,
     #[serde(default, rename = "indexer")]
-    pub indexers: Vec<IndexerEntry>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct IndexerEntry {
-    pub id: String,
-    pub name: Option<String>,
-    pub protocol: Protocol,
-    pub url: String,
-    pub api_path: Option<String>,
-    pub api_key: String,
-    pub timeout_secs: Option<u64>,
-    #[serde(default = "yes")]
-    pub enabled: bool,
+    pub indexers: Vec<IndexerSettings>,
 }
 
 fn default_listen() -> SocketAddr {
@@ -46,10 +32,6 @@ fn default_listen() -> SocketAddr {
 
 fn default_cache_ttl() -> u64 {
     120
-}
-
-fn yes() -> bool {
-    true
 }
 
 impl Config {
@@ -69,29 +51,7 @@ impl Config {
         if self.api_key.trim().is_empty() {
             bail!("api_key must not be empty");
         }
-        let mut seen = HashSet::new();
-        for i in &self.indexers {
-            if i.id.is_empty()
-                || !i
-                    .id
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-            {
-                bail!("indexer id {:?} must be letters, digits, '-' or '_'", i.id);
-            }
-            if i.id == "all" {
-                bail!("indexer id \"all\" is reserved for the combined feed");
-            }
-            if !seen.insert(&i.id) {
-                bail!("indexer id {:?} is used twice", i.id);
-            }
-            if !(i.url.starts_with("http://") || i.url.starts_with("https://")) {
-                bail!(
-                    "indexer {:?}: url must start with http:// or https://",
-                    i.id
-                );
-            }
-        }
+        settings::validate(&self.indexers).map_err(anyhow::Error::msg)?;
         Ok(())
     }
 
@@ -103,27 +63,10 @@ impl Config {
                 .unwrap_or_else(|| DEFAULT_USER_AGENT.to_owned()),
             ..NetSettings::default()
         };
-        let indexers = self.indexers.iter().map(|i| {
-            let mut c = IndexerConfig::new(
-                &i.id,
-                i.name.as_deref().unwrap_or(&i.id),
-                i.protocol,
-                &i.url,
-                &i.api_key,
-            );
-            if let Some(p) = &i.api_path {
-                c = c.api_path(p);
-            }
-            if let Some(t) = i.timeout_secs {
-                c = c.timeout(Duration::from_secs(t));
-            }
-            c.enabled = i.enabled;
-            c
-        });
         Ok(Engine::builder()
             .net(net)
             .cache_ttl(Duration::from_secs(self.cache_ttl_secs))
-            .indexers(indexers)
+            .indexers(self.indexers.iter().map(IndexerSettings::to_config))
             .build()?)
     }
 }
@@ -174,6 +117,7 @@ pub fn random_key() -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use scoutline_core::Protocol;
 
     #[test]
     fn starter_config_parses() {

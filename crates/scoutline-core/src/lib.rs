@@ -29,6 +29,7 @@ pub mod health;
 mod indexer;
 mod query;
 mod result;
+pub mod settings;
 
 pub use dedupe::dedupe;
 pub use engine::{Engine, EngineBuilder, IndexerEvent, Scope, SearchOutcome};
