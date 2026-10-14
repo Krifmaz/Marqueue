@@ -1,0 +1,10 @@
+[package]
+name = "scoutline"
+description = "Built-in indexer engine (phase 4)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+marqueue-adapters.workspace = true
+playbill.workspace = true
