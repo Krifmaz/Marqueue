@@ -1,4 +1,7 @@
 use std::fmt;
+use std::sync::Arc;
+
+use crate::backend::Backend;
 use std::time::Duration;
 
 use scoutline_net::Route;
@@ -30,6 +33,9 @@ pub struct IndexerConfig {
     pub timeout: Duration,
     pub route: Route,
     pub enabled: bool,
+    /// Set for non-feed indexers (YAML definitions); `None` means a native
+    /// Newznab/Torznab API at `base_url` + `api_path`.
+    pub backend: Option<Arc<dyn Backend>>,
 }
 
 impl IndexerConfig {
@@ -50,6 +56,7 @@ impl IndexerConfig {
             timeout: Duration::from_secs(15),
             route: Route::Direct,
             enabled: true,
+            backend: None,
         }
     }
 
@@ -86,6 +93,7 @@ impl fmt::Debug for IndexerConfig {
             .field("timeout", &self.timeout)
             .field("route", &self.route)
             .field("enabled", &self.enabled)
+            .field("backend", &self.backend.is_some())
             .finish()
     }
 }

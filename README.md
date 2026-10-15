@@ -42,6 +42,28 @@ environment:
 
 Set the same key on Scoutline with `SCOUTLINE_API_KEY` (it overrides `api_key` in the file) and put it in a `.env` file next to the compose file.
 
+### Sites without an API (YAML definitions)
+
+Scoutline runs the Cardigann-style YAML definitions Prowlarr and Jackett use (login, search paths, CSS/JSON selectors, filters, category maps). Put `<id>.yml` files in `/config/definitions` and add the indexer:
+
+```toml
+[[indexer]]
+id = "mytracker"
+definition = "mytracker"     # reads /config/definitions/mytracker.yml
+[indexer.settings]           # the settings the definition asks for
+username = "me"
+password = "secret"
+```
+
+None are bundled; the community definitions have no licence file, so get them yourself (e.g. from Prowlarr's Indexers repository, `definitions/v11`). All 579 current v11 definitions load and pass Scoutline's checks:
+
+```sh
+cargo run -p scoutline-defs --example check -- path/to/definitions/v11
+cargo run -p scoutline-defs --example search -- path/to/definitions/v11 nyaasi "frieren"
+```
+
+Download links from sites that need a login go through Scoutline (`/dl/{id}`), which fetches them with its session; it only fetches links on that indexer's own site.
+
 ### Endpoints
 
 | Path | What |
@@ -50,13 +72,14 @@ Set the same key on Scoutline with `SCOUTLINE_API_KEY` (it overrides `api_key` i
 | `/{torznab,newznab}/{all,id}/api` | Torznab/Newznab API (`t=caps`, `search`, `tvsearch`, `movie`, `music`, `book`) |
 | `/api/v1/search` | Prowlarr-compatible search (`query`, `type`, `categories`, `indexerIds`, `limit`, `offset`), plus parsed `release` and all `sources` per result |
 | `/api/v1/indexer` | Prowlarr-compatible indexer list, plus `health` |
+| `/dl/{id}?link=...` | Download proxy for sites that need Scoutline's login session |
 | `/health` | Liveness, no key needed |
 
 Every endpoint except `/` and `/health` needs `apikey=` or an `X-Api-Key` header.
 
 ## Status
 
-Phase 1 of 5 (native feeds) plus a preview of the standalone server.
+Phase 1 (native feeds) and phase 2 (definition engine) done, plus a preview of the standalone server.
 
 - Newznab and Torznab indexers by URL + API key
 - Search types: general/RSS, movie (IMDb/TMDB), TV (TVDB, season, episode), music (artist, album), book (author, title)
@@ -72,9 +95,10 @@ Phase 1 of 5 (native feeds) plus a preview of the standalone server.
 | --- | --- |
 | `scoutline-core` | Indexers, search, cache, health, results |
 | `scoutline-net` | HTTP clients and per-indexer routes (direct for now) |
-| `scoutline-api` | `scoutline` server: Torznab/Newznab output, JSON API, web UI |
+| `scoutline-defs` | YAML definition engine: templates, selectors, filters, logins |
+| `scoutline-api` | `scoutline` server: Torznab/Newznab output, Prowlarr-compatible API, web UI |
 
-`scoutline-defs` (YAML definition engine) arrives in phase 2.
+Not yet: Cloudflare (FlareSolverr/byparr), proxies and WireGuard routes (phase 3), automatic definition updates, captcha logins.
 
 ## Usage
 

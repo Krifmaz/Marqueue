@@ -1,7 +1,7 @@
 //! `scoutline.toml`: the standalone server's settings and indexers.
 
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, bail};
@@ -22,6 +22,9 @@ pub struct Config {
     pub user_agent: Option<String>,
     #[serde(default = "default_cache_ttl")]
     pub cache_ttl_secs: u64,
+    /// Where `<id>.yml` indexer definitions are read from.
+    #[serde(default = "default_definitions_dir")]
+    pub definitions_dir: PathBuf,
     #[serde(default, rename = "indexer")]
     pub indexers: Vec<IndexerSettings>,
 }
@@ -32,6 +35,10 @@ fn default_listen() -> SocketAddr {
 
 fn default_cache_ttl() -> u64 {
     120
+}
+
+fn default_definitions_dir() -> PathBuf {
+    PathBuf::from("/config/definitions")
 }
 
 impl Config {
@@ -63,10 +70,12 @@ impl Config {
                 .unwrap_or_else(|| DEFAULT_USER_AGENT.to_owned()),
             ..NetSettings::default()
         };
+        let indexers = scoutline_defs::build_indexers(&self.indexers, &self.definitions_dir, &net)
+            .map_err(anyhow::Error::msg)?;
         Ok(Engine::builder()
             .net(net)
             .cache_ttl(Duration::from_secs(self.cache_ttl_secs))
-            .indexers(self.indexers.iter().map(IndexerSettings::to_config))
+            .indexers(indexers)
             .build()?)
     }
 }
@@ -95,6 +104,18 @@ cache_ttl_secs = 120
 # api_key = "YOUR-INDEXER-KEY"
 # timeout_secs = 15                   # optional
 # enabled = true                      # optional
+#
+# Sites without an API run through a YAML definition (the Cardigann
+# format Prowlarr and Jackett use). Put <id>.yml in definitions_dir:
+#
+# definitions_dir = "/config/definitions"
+#
+# [[indexer]]
+# id = "mytracker"
+# definition = "mytracker"            # reads mytracker.yml
+# [indexer.settings]                  # the definition's settings
+# username = "me"
+# password = "secret"
 #
 # Any Torznab feed works, e.g. one from Jackett or Prowlarr:
 #
@@ -141,7 +162,7 @@ mod tests {
             "#,
         )
         .unwrap();
-        assert_eq!(c.indexers[0].protocol, Protocol::Newznab);
+        assert_eq!(c.indexers[0].protocol, Some(Protocol::Newznab));
         let engine = c.build_engine().unwrap();
         let idx = engine.indexers().next().unwrap();
         assert_eq!(idx.name, "geek");

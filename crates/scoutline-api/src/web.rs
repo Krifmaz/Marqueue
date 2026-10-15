@@ -5,7 +5,7 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
-use scoutline_core::{Engine, Protocol, Scope};
+use scoutline_core::{Engine, Protocol, Scope, SearchResult};
 
 use crate::prowlarr;
 use crate::torznab::{self, Params, Request};
@@ -31,6 +31,7 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(|| async { "ok" }))
         .route("/api/v1/indexer", get(indexers))
         .route("/api/v1/search", get(search))
+        .route("/dl/{id}", get(download))
         .route("/{protocol}/{id}/api", get(feed))
         .route("/{protocol}/{id}", get(feed))
         .with_state(Arc::new(state))
@@ -89,12 +90,101 @@ async fn feed(
         Ok(Request::Caps) => xml(StatusCode::OK, torznab::caps(&title)),
         Ok(Request::Search(q)) => {
             let out = state.engine.search_in(&scope, &q).await;
-            xml(
-                StatusCode::OK,
-                torznab::feed(&title, protocol, &out.results),
-            )
+            let results = proxy_links(&out.results, &state, &base_url(&headers));
+            xml(StatusCode::OK, torznab::feed(&title, protocol, &results))
         }
         Err((code, msg)) => fail(code, &msg),
+    }
+}
+
+/// This server's address as the client reached it (honours a reverse
+/// proxy's `X-Forwarded-*` headers).
+fn base_url(headers: &HeaderMap) -> String {
+    let h = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
+    let host = h("x-forwarded-host")
+        .or_else(|| h("host"))
+        .unwrap_or("localhost:9797");
+    let proto = h("x-forwarded-proto").unwrap_or("http");
+    format!("{proto}://{host}")
+}
+
+/// Points download links that only work with an indexer's login session
+/// at Scoutline's `/dl/{id}`, which fetches them with that session.
+fn proxy_links(results: &[SearchResult], state: &AppState, base: &str) -> Vec<SearchResult> {
+    let enc = |s: &str| url::form_urlencoded::byte_serialize(s.as_bytes()).collect::<String>();
+    let needs_proxy = |id: &str| {
+        state
+            .engine
+            .indexers()
+            .find(|i| i.id == id)
+            .and_then(|i| i.backend.as_ref())
+            .is_some_and(|b| b.needs_download_proxy())
+    };
+    results
+        .iter()
+        .cloned()
+        .map(|mut r| {
+            for o in &mut r.origins {
+                if !needs_proxy(&o.indexer_id) {
+                    continue;
+                }
+                if let Some(link) = o
+                    .download_url
+                    .as_deref()
+                    .filter(|l| !l.starts_with("magnet:"))
+                {
+                    o.download_url = Some(format!(
+                        "{base}/dl/{}?apikey={}&link={}",
+                        enc(&o.indexer_id),
+                        enc(&state.api_key),
+                        enc(link)
+                    ));
+                }
+            }
+            r
+        })
+        .collect()
+}
+
+/// `/dl/{id}?link=...`: fetches a `.torrent` with the indexer's session.
+/// Only links on that indexer's own site are fetched.
+async fn download(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    RawQuery(raw): RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    if !state.authorized(query_key(raw.as_deref()).as_deref(), &headers) {
+        return (StatusCode::UNAUTHORIZED, "Invalid API key").into_response();
+    }
+    let Some(link) = url::form_urlencoded::parse(raw.as_deref().unwrap_or("").as_bytes())
+        .find(|(k, _)| k == "link")
+        .map(|(_, v)| v.into_owned())
+    else {
+        return (StatusCode::BAD_REQUEST, "missing link").into_response();
+    };
+    let Some(backend) = state
+        .engine
+        .indexers()
+        .find(|i| i.id == id)
+        .and_then(|i| i.backend.clone())
+    else {
+        return (StatusCode::NOT_FOUND, "no such indexer").into_response();
+    };
+    match backend.download(&link).await {
+        Ok(d) => (
+            StatusCode::OK,
+            [
+                (header::CONTENT_TYPE, d.content_type),
+                (
+                    header::CONTENT_DISPOSITION,
+                    format!("attachment; filename=\"{id}.torrent\""),
+                ),
+            ],
+            d.bytes,
+        )
+            .into_response(),
+        Err(e) => (StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
     }
 }
 
@@ -128,8 +218,8 @@ async fn search(
         .engine
         .search_in(&params.scope(&state.engine), &params.query())
         .await;
-    let releases: Vec<_> = out
-        .results
+    let results = proxy_links(&out.results, &state, &base_url(&headers));
+    let releases: Vec<_> = results
         .iter()
         .map(|r| prowlarr::release(r, &state.engine))
         .collect();

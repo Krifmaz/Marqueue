@@ -19,6 +19,7 @@
 //! # Ok(()) }
 //! ```
 
+pub mod backend;
 pub mod cache;
 pub mod category;
 mod dedupe;

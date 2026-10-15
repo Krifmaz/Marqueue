@@ -204,6 +204,13 @@ async fn fetch(
     config: &IndexerConfig,
     query: &SearchQuery,
 ) -> Result<Vec<SearchResult>, IndexerError> {
+    if let Some(backend) = &config.backend {
+        let items = backend.search(query).await?;
+        return Ok(items
+            .into_iter()
+            .map(|item| SearchResult::from_item(item, config, query.search_type))
+            .collect());
+    }
     // `without_url` keeps the API key out of error messages.
     let http = |e: reqwest::Error| IndexerError::Http(e.without_url().to_string());
 
