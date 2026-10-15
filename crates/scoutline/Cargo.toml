@@ -10,6 +10,8 @@ marqueue-adapters.workspace = true
 marqueue-core.workspace = true
 playbill.workspace = true
 scoutline-core.workspace = true
+scoutline-defs.workspace = true
+scoutline-net.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true

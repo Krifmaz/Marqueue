@@ -42,7 +42,7 @@ async fn main() {
         tracing::error!("{e}");
         std::process::exit(1);
     });
-    let scoutline = Scoutline::new(&config.indexers).unwrap_or_else(|e| {
+    let scoutline = Scoutline::new(&config.indexers, &config.definitions_dir).unwrap_or_else(|e| {
         tracing::error!("indexers: {e}");
         std::process::exit(1);
     });
@@ -187,7 +187,9 @@ mod tests {
     use tower::ServiceExt;
 
     fn test_app() -> Router {
-        app(Arc::new(Scoutline::new(&[]).unwrap()))
+        app(Arc::new(
+            Scoutline::new(&[], std::path::Path::new("/nonexistent")).unwrap(),
+        ))
     }
 
     async fn get_json(uri: &str) -> serde_json::Value {
@@ -244,7 +246,9 @@ mod tests {
             tracker.uri()
         ))
         .unwrap();
-        let app = app(Arc::new(Scoutline::new(&config.indexers).unwrap()));
+        let app = app(Arc::new(
+            Scoutline::new(&config.indexers, &config.definitions_dir).unwrap(),
+        ));
 
         let res = app
             .clone()

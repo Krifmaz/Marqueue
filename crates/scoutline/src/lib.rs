@@ -5,12 +5,14 @@
 //! with [`playbill`] using the hint for the media type being searched, like
 //! every other Marqueue candidate.
 
+use std::path::Path;
+
 use marqueue_adapters::{AdapterError, Candidate, Indexer, Protocol, Result, SearchQuery};
 use marqueue_core::MediaType;
 use scoutline_core::{Engine, SearchType, category};
 
 pub use scoutline_core::health;
-pub use scoutline_core::settings::{IndexerSettings, validate};
+pub use scoutline_core::settings::{IndexerSettings, SettingValue, validate};
 
 /// The embedded indexer engine.
 #[derive(Clone)]
@@ -19,11 +21,19 @@ pub struct Scoutline {
 }
 
 impl Scoutline {
-    /// Builds the engine for these indexers. Fails on invalid settings.
-    pub fn new(indexers: &[IndexerSettings]) -> std::result::Result<Self, AdapterError> {
+    /// Builds the engine for these indexers; YAML definitions are read
+    /// from `definitions_dir`. Fails on invalid settings.
+    pub fn new(
+        indexers: &[IndexerSettings],
+        definitions_dir: &Path,
+    ) -> std::result::Result<Self, AdapterError> {
         validate(indexers).map_err(AdapterError)?;
+        let net = scoutline_net::NetSettings::default();
+        let configs = scoutline_defs::build_indexers(indexers, definitions_dir, &net)
+            .map_err(AdapterError)?;
         let engine = Engine::builder()
-            .indexers(indexers.iter().map(IndexerSettings::to_config))
+            .net(net)
+            .indexers(configs)
             .build()
             .map_err(|e| AdapterError(e.to_string()))?;
         Ok(Self { engine })
@@ -185,14 +195,12 @@ mod tests {
         let settings: Vec<IndexerSettings> = vec![IndexerSettings {
             id: "t".into(),
             name: Some("Tracker".into()),
-            protocol: scoutline_core::Protocol::Torznab,
+            protocol: Some(scoutline_core::Protocol::Torznab),
             url: tracker.uri(),
-            api_path: None,
             api_key: "k".into(),
-            timeout_secs: None,
-            enabled: true,
+            ..Default::default()
         }];
-        let s = Scoutline::new(&settings).unwrap();
+        let s = Scoutline::new(&settings, Path::new("/nonexistent")).unwrap();
         assert_eq!(s.indexer_count(), 1);
 
         let mut q = query(MediaType::Anime, "One Piece");
@@ -210,15 +218,13 @@ mod tests {
     async fn all_failing_is_an_error() {
         let settings = vec![IndexerSettings {
             id: "down".into(),
-            name: None,
-            protocol: scoutline_core::Protocol::Newznab,
+            protocol: Some(scoutline_core::Protocol::Newznab),
             url: "http://127.0.0.1:9".into(),
-            api_path: None,
             api_key: "k".into(),
             timeout_secs: Some(2),
-            enabled: true,
+            ..Default::default()
         }];
-        let s = Scoutline::new(&settings).unwrap();
+        let s = Scoutline::new(&settings, Path::new("/nonexistent")).unwrap();
         let err = s
             .search(&query(MediaType::Movie, "Dune"))
             .await

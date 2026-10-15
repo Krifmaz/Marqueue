@@ -1,15 +1,22 @@
 //! `/config/marqueue.toml`. For now it holds the indexers Scoutline
 //! searches; the rest of Marqueue's settings will live in the UI.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use scoutline::IndexerSettings;
 use serde::Deserialize;
 
 pub const DEFAULT_PATH: &str = "/config/marqueue.toml";
 
-#[derive(Debug, Default, Deserialize)]
+fn default_definitions_dir() -> PathBuf {
+    PathBuf::from("/config/definitions")
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Config {
+    /// Where `<id>.yml` indexer definitions are read from.
+    #[serde(default = "default_definitions_dir")]
+    pub definitions_dir: PathBuf,
     /// Newznab/Torznab indexers, same `[[indexer]]` blocks as Scoutline's
     /// standalone `scoutline.toml`.
     #[serde(default, rename = "indexer")]
@@ -31,6 +38,18 @@ const STARTER: &str = r#"# Marqueue settings. Restart Marqueue after editing.
 # api_key = "YOUR-INDEXER-KEY"
 # timeout_secs = 15                   # optional
 # enabled = true                      # optional
+#
+# Sites without an API run through a YAML definition (the format Prowlarr
+# and Jackett use). Put <id>.yml in definitions_dir:
+#
+# definitions_dir = "/config/definitions"
+#
+# [[indexer]]
+# id = "mytracker"
+# definition = "mytracker"            # reads mytracker.yml
+# [indexer.settings]
+# username = "me"
+# password = "secret"
 "#;
 
 impl Config {

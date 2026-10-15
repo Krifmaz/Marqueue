@@ -38,6 +38,17 @@ api_key = "YOUR-INDEXER-KEY"
 
 These are the same blocks as a standalone `scoutline.toml`, so they can be copied across.
 
+Sites without an API run through the YAML definitions Prowlarr and Jackett use. Put `<id>.yml` in `/config/definitions` (`definitions_dir` changes it) and add:
+
+```toml
+[[indexer]]
+id = "mytracker"
+definition = "mytracker"
+[indexer.settings]
+username = "me"
+password = "secret"
+```
+
 | Endpoint | What |
 | --- | --- |
 | `GET /api/v1/search?type=tv&title=The+Bear&season=3&episode=4` | Search all indexers (`type`: movie, tv, anime, ebook, audiobook; also `year`, `absolute`) |
