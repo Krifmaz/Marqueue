@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 description = "Release-name parser for movies, TV, anime, ebooks and audiobooks"
-repository = "https://github.com/Krifmaz/playbill"
+repository = "https://github.com/Krifmaz/Marqueue"
 keywords = ["parser", "release", "media", "torrent", "usenet"]
 categories = ["parser-implementations", "multimedia"]
 

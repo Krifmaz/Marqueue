@@ -59,6 +59,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
 
 [[package]]
+name = "anyhow"
+version = "1.0.104"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
+
+[[package]]
 name = "arraydeque"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1397,10 +1403,10 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 [[package]]
 name = "playbill"
 version = "0.1.0"
-source = "git+https://github.com/Krifmaz/playbill#8f84f9a051b6b2e787e774c27c233a34daf502e8"
 dependencies = [
  "regex",
  "serde",
+ "toml",
 ]
 
 [[package]]
@@ -1788,9 +1794,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "scoutline-api"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "chrono",
+ "getrandom 0.4.3",
+ "http-body-util",
+ "scoutline-core",
+ "scoutline-defs",
+ "scoutline-net",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "wiremock",
+]
+
+[[package]]
 name = "scoutline-core"
 version = "0.1.0"
-source = "git+https://github.com/Krifmaz/Scoutline#d67af1c8b2ec2a07bb93b5d353d8bdc7ea02fdd5"
 dependencies = [
  "chrono",
  "futures",
@@ -1803,12 +1831,12 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+ "wiremock",
 ]
 
 [[package]]
 name = "scoutline-defs"
 version = "0.1.0"
-source = "git+https://github.com/Krifmaz/Scoutline#d67af1c8b2ec2a07bb93b5d353d8bdc7ea02fdd5"
 dependencies = [
  "chrono",
  "encoding_rs",
@@ -1828,12 +1856,12 @@ dependencies = [
  "tracing",
  "unicode-normalization",
  "url",
+ "wiremock",
 ]
 
 [[package]]
 name = "scoutline-net"
 version = "0.1.0"
-source = "git+https://github.com/Krifmaz/Scoutline#d67af1c8b2ec2a07bb93b5d353d8bdc7ea02fdd5"
 dependencies = [
  "reqwest",
  "thiserror",
@@ -1919,7 +1947,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1ec1f5cac0eb96063c64b28705255a7ed6e7d77f95c1d25e9f8b8c928006ce1"
 dependencies = [
  "annotate-snippets",
- "base64 0.22.1",
+ "base64 0.23.1",
  "encoding_rs_io",
  "granit-parser",
  "nohash-hasher",

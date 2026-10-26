@@ -1,13 +1,13 @@
 # Scoutline
 
-A Rust indexer engine that replaces Prowlarr. It ships as a crate inside [Marqueue](https://github.com/Krifmaz/Marqueue) and will also run standalone with a Torznab/Newznab API.
+A Rust indexer engine that replaces Prowlarr. It ships as a crate inside Marqueue and also runs standalone with a Torznab/Newznab API.
 
-Release names are parsed with [playbill](https://github.com/Krifmaz/playbill), the same parser Marqueue uses, so scoring matches the library.
+Release names are parsed with [playbill](../playbill), the same parser Marqueue uses, so scoring matches the library.
 
 ## Try it with Docker
 
 ```sh
-curl -O https://raw.githubusercontent.com/Krifmaz/Scoutline/HEAD/compose.yaml
+curl -O https://raw.githubusercontent.com/Krifmaz/Marqueue/HEAD/docker-compose.yml
 docker compose up -d
 ```
 

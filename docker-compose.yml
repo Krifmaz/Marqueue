@@ -10,3 +10,20 @@ services:
       - TZ=Etc/UTC
     volumes:
       - ./config:/config
+
+  # Optional: standalone Scoutline with a Torznab/Newznab and Prowlarr-style
+  # API, only needed for outside apps (Encore, Sonarr, Radarr).
+  # Marqueue already has Scoutline built in.
+  scoutline:
+    image: ghcr.io/krifmaz/scoutline:latest
+    container_name: scoutline
+    restart: unless-stopped
+    ports:
+      - "9797:9797"
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      RUST_LOG: info
+      SCOUTLINE_API_KEY: ${SCOUTLINE_API_KEY:-}
+    volumes:
+      - ./scoutline-config:/config

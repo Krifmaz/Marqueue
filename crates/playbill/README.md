@@ -1,6 +1,6 @@
 # Playbill
 
-Release-name parser for movies, TV, anime, ebooks and audiobooks, written in Rust. Shared by [Marqueue](https://github.com/Krifmaz/Marqueue) and [Scoutline](https://github.com/Krifmaz/Scoutline).
+Release-name parser for movies, TV, anime, ebooks and audiobooks, written in Rust. Part of [Marqueue](https://github.com/Krifmaz/Marqueue); shared by Marqueue and Scoutline.
 
 It turns a name like this:
 

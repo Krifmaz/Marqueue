@@ -2,7 +2,7 @@
 
 One self-hosted Rust program to request movies, TV, anime, ebooks and audiobooks, then find, download, import and upgrade them. Replaces Sonarr, Radarr, Readarr and Overseerr/Jellyseerr.
 
-Release names are parsed by [Playbill](https://github.com/Krifmaz/playbill).
+Release names are parsed by [playbill](crates/playbill).
 
 ## Workspace
 
@@ -12,7 +12,7 @@ Release names are parsed by [Playbill](https://github.com/Krifmaz/playbill).
 | `marqueue-core` | Media model, quality profiles, release scoring |
 | `marqueue-metadata` | Metadata provider trait and local cache |
 | `marqueue-adapters` | Traits for indexers, download clients, media servers, notifiers |
-| `scoutline` | Built-in indexer engine: [Scoutline](https://github.com/Krifmaz/Scoutline) embedded, no Prowlarr needed |
+| `scoutline` | Built-in indexer engine: Scoutline embedded, no Prowlarr needed |
 
 ## Run
 

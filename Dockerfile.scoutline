@@ -14,7 +14,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /usr/local/bin/scoutline /usr/local/bin/scoutline
-COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/scoutline-entrypoint.sh /usr/local/bin/entrypoint.sh
 
 ENV SCOUTLINE_CONFIG=/config/scoutline.toml \
     PUID=1000 \
@@ -27,4 +27,4 @@ CMD ["serve"]
 
 LABEL org.opencontainers.image.title="Scoutline" \
       org.opencontainers.image.description="Rust indexer engine with a Torznab/Newznab API" \
-      org.opencontainers.image.source="https://github.com/Krifmaz/Scoutline"
+      org.opencontainers.image.source="https://github.com/Krifmaz/Marqueue"
