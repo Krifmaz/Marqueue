@@ -19,6 +19,8 @@ permissions:
 jobs:
   build:
     strategy:
+      # One image failing to push must not stop the other.
+      fail-fast: false
       matrix:
         image: [marqueue, scoutline]
         arch:
@@ -65,7 +67,9 @@ jobs:
 
   merge:
     needs: build
+    if: ${{ !cancelled() }}
     strategy:
+      fail-fast: false
       matrix:
         image: [marqueue, scoutline]
     runs-on: ubuntu-24.04
@@ -95,6 +99,8 @@ jobs:
       - name: Create multi-arch tags
         working-directory: /tmp/digests
         run: |
+          # Both architectures must have built for this image.
+          [ "$(ls | wc -l)" -eq 2 ] || { echo "missing an architecture for ${{ matrix.image }}"; exit 1; }
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.IMAGE }}@sha256:%s ' *)
